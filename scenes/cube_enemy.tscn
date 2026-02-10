@@ -1,0 +1,56 @@
+[gd_scene format=3 uid="uid://cube001"]
+
+[ext_resource type="Script" path="res://scripts/cube_enemy.gd" id="1"]
+
+[sub_resource type="CapsuleShape3D" id="Shape"]
+radius = 0.22
+height = 0.9
+
+[sub_resource type="CylinderMesh" id="BodyMesh"]
+top_radius = 0.18
+bottom_radius = 0.2
+height = 0.5
+
+[sub_resource type="SphereMesh" id="HeadMesh"]
+radius = 0.16
+height = 0.32
+
+[sub_resource type="CylinderMesh" id="ArmMesh"]
+top_radius = 0.06
+bottom_radius = 0.06
+height = 0.4
+
+[sub_resource type="StandardMaterial3D" id="BodyMat"]
+albedo_color = Color(0.55, 0.25, 0.1, 1)
+
+[sub_resource type="StandardMaterial3D" id="HeadMat"]
+albedo_color = Color(0.85, 0.65, 0.5, 1)
+
+[node name="CubeEnemy" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("Shape")
+
+[node name="Body" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
+mesh = SubResource("BodyMesh")
+material_override = SubResource("BodyMat")
+
+[node name="Head" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.82, 0)
+mesh = SubResource("HeadMesh")
+material_override = SubResource("HeadMat")
+
+[node name="LeftArm" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.26, 0.5, 0)
+mesh = SubResource("ArmMesh")
+material_override = SubResource("BodyMat")
+
+[node name="RightArm" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.26, 0.5, 0)
+mesh = SubResource("ArmMesh")
+material_override = SubResource("BodyMat")

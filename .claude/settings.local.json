@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(for:*)",
+      "Bash(do if strings \"$file\")",
+      "Bash(then echo \"Image signature found in: $file\")",
+      "Bash(fi)",
+      "Bash(done)"
+    ]
+  }
+}

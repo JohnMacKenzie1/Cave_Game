@@ -1,0 +1,55 @@
+[gd_scene format=3 uid="uid://main001"]
+
+[ext_resource type="Script" uid="uid://b4crc1wckyta8" path="res://scripts/player.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/crossbow.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="3"]
+[ext_resource type="Script" uid="uid://c3em8t7584527" path="res://scripts/labyrinth.gd" id="4"]
+[ext_resource type="Script" path="res://scripts/dwarf_spawner.gd" id="5"]
+
+[sub_resource type="Environment" id="Environment_cave"]
+background_mode = 1
+background_color = Color(0.02, 0.015, 0.01, 1)
+ambient_light_energy = 0.0
+ssao_enabled = true
+ssao_radius = 2.0
+ssao_intensity = 3.0
+glow_intensity = 0.8
+glow_bloom = 0.1
+fog_enabled = true
+fog_light_color = Color(0, 0, 0, 1)
+fog_density = 0.005
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.35
+height = 1.8
+
+[node name="Main" type="Node3D" unique_id=911110764]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=614243452]
+environment = SubResource("Environment_cave")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1693690805]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+collision_layer = 2
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1783171697]
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="Head" type="Node3D" parent="Player" unique_id=1844280885]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Player/Head" unique_id=586688235]
+current = true
+
+[node name="WeaponOffset" type="Node3D" parent="Player/Head/Camera3D" unique_id=1463705597]
+
+[node name="Crossbow" parent="Player/Head/Camera3D/WeaponOffset" unique_id=1169460452 instance=ExtResource("2")]
+
+[node name="HUD" parent="." unique_id=286534090 instance=ExtResource("3")]
+
+[node name="Labyrinth" type="Node3D" parent="." unique_id=935782217]
+script = ExtResource("4")
+
+[node name="DwarfSpawner" type="Node3D" parent="."]
+script = ExtResource("5")
