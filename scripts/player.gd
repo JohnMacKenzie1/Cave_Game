@@ -18,6 +18,8 @@ var bolt_scene: PackedScene = preload("res://scenes/bolt.tscn")
 var has_crossbow := false
 var has_spear := false
 var spear_ref: Node = null
+var light_spheres := 0
+var light_sphere_scene: PackedScene = preload("res://scenes/light_sphere.tscn")
 var can_shoot := true
 var ammo := MAX_AMMO
 var torch_light: OmniLight3D
@@ -49,6 +51,10 @@ func equip_crossbow() -> void:
 func equip_spear() -> void:
 	pass
 
+var active_weapon := 0
+var weapon_slots: Array[String] = []
+var weapon_ui_slots: Array[Control] = []
+
 func _try_pickup_spear() -> void:
 	if has_spear:
 		return
@@ -58,7 +64,150 @@ func _try_pickup_spear() -> void:
 			s.pickup(self)
 			has_spear = true
 			spear_ref = s
+			if "spear" not in weapon_slots:
+				weapon_slots.append("spear")
+			_switch_weapon(weapon_slots.find("spear") + 1)
 			return
+
+func _switch_weapon(slot: int) -> void:
+	if slot < 1 or slot > weapon_slots.size():
+		return
+	active_weapon = slot
+	var weapon_name: String = weapon_slots[slot - 1]
+	var weapon_offset := get_node("Head/Camera3D/WeaponOffset")
+	weapon_offset.visible = (weapon_name == "crossbow")
+	ammo_label.visible = (weapon_name == "crossbow")
+	if spear_ref != null:
+		spear_ref.visible = (weapon_name == "spear")
+	is_ads = false
+	_update_weapon_ui()
+	_update_sphere_ui()
+
+func _update_weapon_ui() -> void:
+	for ui in weapon_ui_slots:
+		if is_instance_valid(ui):
+			ui.queue_free()
+	weapon_ui_slots.clear()
+
+	var hud := get_tree().current_scene.get_node_or_null("HUD")
+	if hud == null:
+		return
+
+	for i in weapon_slots.size():
+		var slot_num := i + 1
+		var wname: String = weapon_slots[i]
+		var is_active := (slot_num == active_weapon)
+
+		var panel := PanelContainer.new()
+		panel.anchors_preset = Control.PRESET_BOTTOM_RIGHT
+		panel.anchor_left = 1.0
+		panel.anchor_top = 1.0
+		panel.anchor_right = 1.0
+		panel.anchor_bottom = 1.0
+		panel.offset_left = -220 + i * 70
+		panel.offset_top = -120
+		panel.offset_right = -155 + i * 70
+		panel.offset_bottom = -65
+		panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0, 0, 0, 0.5) if is_active else Color(0, 0, 0, 0.25)
+		style.border_color = Color(1, 1, 1, 0.8) if is_active else Color(1, 1, 1, 0.3)
+		style.set_border_width_all(2 if is_active else 1)
+		style.set_corner_radius_all(4)
+		panel.add_theme_stylebox_override("panel", style)
+
+		var vbox := VBoxContainer.new()
+		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		panel.add_child(vbox)
+
+		# Weapon icon drawn with simple lines
+		var icon_label := Label.new()
+		icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		icon_label.add_theme_font_size_override("font_size", 16)
+		icon_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.9) if is_active else Color(1, 1, 1, 0.4))
+		if wname == "crossbow":
+			icon_label.text = "[+>"
+		elif wname == "spear":
+			icon_label.text = "---|>"
+		elif wname == "spheres":
+			icon_label.text = "( * )"
+		vbox.add_child(icon_label)
+
+		# Slot number
+		var num_label := Label.new()
+		num_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		num_label.add_theme_font_size_override("font_size", 12)
+		num_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.7) if is_active else Color(1, 1, 1, 0.3))
+		num_label.text = str(slot_num)
+		vbox.add_child(num_label)
+
+		hud.add_child(panel)
+		weapon_ui_slots.append(panel)
+
+func _try_pickup_spheres() -> void:
+	# Pick up wall-spawned sphere pickups
+	var wall_pickups := get_tree().get_nodes_in_group("sphere_pickup")
+	for p in wall_pickups:
+		if p.has_meta("player_nearby") and p.get_meta("player_nearby"):
+			for pp in wall_pickups:
+				pp.queue_free()
+			light_spheres += 3
+			if "spheres" not in weapon_slots:
+				weapon_slots.append("spheres")
+			_switch_weapon(weapon_slots.find("spheres") + 1)
+			_update_sphere_ui()
+			return
+	# Pick up thrown spheres on the ground
+	var spheres := get_tree().get_nodes_in_group("light_sphere")
+	for s in spheres:
+		if s.is_in_group("sphere_pickup"):
+			continue
+		if s.has_method("can_pickup") and s.can_pickup():
+			light_spheres += 1
+			_update_sphere_ui()
+			s.queue_free()
+			return
+
+func throw_light_sphere() -> void:
+	if light_spheres <= 0:
+		return
+	light_spheres -= 1
+	_update_sphere_ui()
+	var sphere := light_sphere_scene.instantiate()
+	get_tree().current_scene.add_child(sphere)
+	var origin := camera.global_position + camera.global_basis * Vector3(0, -0.1, -0.6)
+	var direction := -camera.global_basis.z
+	sphere.throw(origin, direction)
+
+func _update_sphere_ui() -> void:
+	var hud := get_tree().current_scene.get_node_or_null("HUD")
+	if hud == null:
+		return
+	var existing := hud.get_node_or_null("SphereCounter")
+	if light_spheres > 0:
+		if existing == null:
+			existing = Label.new()
+			existing.name = "SphereCounter"
+			existing.anchors_preset = Control.PRESET_BOTTOM_RIGHT
+			existing.anchor_left = 1.0
+			existing.anchor_top = 1.0
+			existing.anchor_right = 1.0
+			existing.anchor_bottom = 1.0
+			existing.offset_left = -220
+			existing.offset_top = -150
+			existing.offset_right = -30
+			existing.offset_bottom = -125
+			existing.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+			existing.grow_vertical = Control.GROW_DIRECTION_BEGIN
+			existing.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			existing.add_theme_font_size_override("font_size", 20)
+			existing.add_theme_color_override("font_color", Color(1.0, 0.9, 0.5, 0.85))
+			hud.add_child(existing)
+		existing.text = "SPHERES: %d" % light_spheres
+	elif existing != null:
+		existing.queue_free()
 
 func throw_spear() -> void:
 	if not has_spear or spear_ref == null:
@@ -115,16 +264,20 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
+	var active_name := weapon_slots[active_weapon - 1] if active_weapon >= 1 and active_weapon <= weapon_slots.size() else ""
+
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
-		is_ads = event.pressed and has_crossbow
+		is_ads = event.pressed and active_name == "crossbow"
 
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		if Input.get_mouse_mode() == Input.MOUSE_MODE_VISIBLE:
 			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		elif has_spear and not has_crossbow:
+		elif active_name == "spear" and has_spear:
 			throw_spear()
-		elif has_crossbow and can_shoot and ammo > 0:
+		elif active_name == "crossbow" and has_crossbow and can_shoot and ammo > 0:
 			shoot()
+		elif active_name == "spheres" and light_spheres > 0:
+			throw_light_sphere()
 
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
 		if has_spear:
@@ -132,6 +285,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.is_action_pressed("interact"):
 		_try_pickup_spear()
+		_try_pickup_spheres()
+
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_1:
+			_switch_weapon(1)
+		elif event.keycode == KEY_2:
+			_switch_weapon(2)
+		elif event.keycode == KEY_3:
+			_switch_weapon(3)
 
 func _process(delta: float) -> void:
 	torch_time += delta
@@ -149,6 +311,31 @@ func _process(delta: float) -> void:
 		for s in spears:
 			if s.has_method("show_prompt"):
 				s.show_prompt(near_spear)
+
+	# Sphere pickup prompt
+	var sphere_prompt := get_tree().current_scene.get_node_or_null("HUD/SpherePrompt")
+	if sphere_prompt:
+		var near_wall := false
+		var near_ground := false
+		for p in get_tree().get_nodes_in_group("sphere_pickup"):
+			if p.has_meta("player_nearby") and p.get_meta("player_nearby"):
+				near_wall = true
+				break
+		if not near_wall:
+			for s in get_tree().get_nodes_in_group("light_sphere"):
+				if s.is_in_group("sphere_pickup"):
+					continue
+				if s.has_method("can_pickup") and s.can_pickup():
+					near_ground = true
+					break
+		if near_wall:
+			sphere_prompt.text = "Press E to pick up light spheres"
+			sphere_prompt.visible = true
+		elif near_ground:
+			sphere_prompt.text = "Press E to pick up light sphere"
+			sphere_prompt.visible = true
+		else:
+			sphere_prompt.visible = false
 
 	# ADS interpolation
 	var target_ads := 1.0 if is_ads else 0.0

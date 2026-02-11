@@ -42,10 +42,16 @@ func _physics_process(_delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	if not is_thrown:
 		return
+	# Save the flight direction before freezing
+	var flight_dir := linear_velocity.normalized()
 	is_thrown = false
 	freeze = true
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
+	# Re-orient so tip points in flight direction
+	if flight_dir.length() > 0.1:
+		look_at(global_position + flight_dir, Vector3.UP)
+		rotate_object_local(Vector3.RIGHT, deg_to_rad(140))
 	if body.is_in_group("enemy") and body.has_method("take_damage"):
 		body.take_damage(DAMAGE, global_position)
 		var pos := global_position

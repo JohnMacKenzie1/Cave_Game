@@ -4,6 +4,7 @@ var player_inside := false
 var prompt: Label
 
 func _ready() -> void:
+	add_to_group("crossbow_pickup")
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
 	prompt = get_tree().current_scene.get_node_or_null("HUD/PickupPrompt")
@@ -25,7 +26,9 @@ func _process(_delta: float) -> void:
 		var player := get_tree().current_scene.get_node_or_null("Player")
 		if player and not player.has_crossbow:
 			player.has_crossbow = true
+			player.weapon_slots.append("crossbow")
 			player.equip_crossbow()
+			player._switch_weapon(player.weapon_slots.size())
 			if prompt:
 				prompt.visible = false
 			queue_free()

@@ -14,6 +14,7 @@ var cube_scene: PackedScene = preload("res://scenes/cube_enemy.tscn")
 var torch_scene: PackedScene = preload("res://scenes/torch.tscn")
 var pickup_scene: PackedScene = preload("res://scenes/crossbow_pickup.tscn")
 var spear_scene: PackedScene = preload("res://scenes/spear.tscn")
+var light_sphere_scene: PackedScene = preload("res://scenes/light_sphere.tscn")
 
 var mats := {}
 var mat_ceiling: StandardMaterial3D
@@ -27,9 +28,10 @@ func _ready() -> void:
 	_build_astar()
 	_build_rooms()
 	_build_passages()
-	_build_shooting_range()
 	_spawn_pickup()
 	_spawn_spear_pickup()
+	_spawn_light_spheres()
+	_build_armory_sign()
 
 func _room_id(row: int, col: int) -> int:
 	return row * 4 + col
@@ -197,8 +199,6 @@ func _build_wall(room: Node3D, wall_mat: StandardMaterial3D, row: int, col: int,
 			has_door = _has_connection(row, col, 0, 1)
 		"west":
 			has_door = _has_connection(row, col, 0, -1)
-			if row == 0 and col == 0:
-				has_door = true
 
 	match side:
 		"north":
@@ -231,30 +231,42 @@ func _build_wall(room: Node3D, wall_mat: StandardMaterial3D, row: int, col: int,
 				_add_box(room, Vector3(-half, 2.5, 0), Vector3(WALL_THICK, 5, ROOM_SIZE), wall_mat)
 
 func _place_torches(room: Node3D, row: int, col: int) -> void:
-	if row != 0 or col != 0:
+	if not (row == 0 and col == 0) and not (row == 0 and col == 1):
 		return
 	var half := ROOM_SIZE / 2.0
-	var wall_offset := half - 0.25
+	var corner := half - 0.5
 	var spots: Array = []
 
-	if not _has_connection(row, col, -1, 0):
-		spots.append([Vector3(2, 2.5, -wall_offset), 0.0])
-		spots.append([Vector3(-2, 2.5, -wall_offset), 0.0])
-	if not _has_connection(row, col, 1, 0):
-		spots.append([Vector3(2, 2.5, wall_offset), PI])
-		spots.append([Vector3(-2, 2.5, wall_offset), PI])
-	if not _has_connection(row, col, 0, 1):
-		spots.append([Vector3(wall_offset, 2.5, 2), -PI / 2.0])
-		spots.append([Vector3(wall_offset, 2.5, -2), -PI / 2.0])
-	if not _has_connection(row, col, 0, -1):
-		spots.append([Vector3(-wall_offset, 2.5, 2), PI / 2.0])
-		spots.append([Vector3(-wall_offset, 2.5, -2), PI / 2.0])
+	if row == 0 and col == 1:
+		# Armory: 4 torches in corners
+		spots.append([Vector3(-corner, 2.5, -corner), PI / 4.0])
+		spots.append([Vector3(corner, 2.5, -corner), -PI / 4.0])
+		spots.append([Vector3(-corner, 2.5, corner), 3.0 * PI / 4.0])
+		spots.append([Vector3(corner, 2.5, corner), -3.0 * PI / 4.0])
+	elif row == 0 and col == 0:
+		# Spawn room: 2 torches in far corners (north wall)
+		spots.append([Vector3(-corner, 2.5, -corner), PI / 4.0])
+		spots.append([Vector3(corner, 2.5, -corner), -PI / 4.0])
+
+	var rod_mat := StandardMaterial3D.new()
+	rod_mat.albedo_color = Color(0.15, 0.15, 0.18)
+	rod_mat.metallic = 0.8
 
 	for spot in spots:
 		var t := torch_scene.instantiate()
 		t.position = spot[0]
 		t.rotation.y = spot[1]
 		room.add_child(t)
+
+		# Rod from corner wall to torch
+		var rod := MeshInstance3D.new()
+		var rod_mesh := BoxMesh.new()
+		rod_mesh.size = Vector3(0.06, 0.06, 0.8)
+		rod.mesh = rod_mesh
+		rod.material_override = rod_mat
+		rod.position = Vector3(0, 0.0, -0.4)
+		rod.rotation.y = 0.0
+		t.add_child(rod)
 
 func _build_passages() -> void:
 	for idx in connections.size():
@@ -293,111 +305,6 @@ func _build_passages() -> void:
 			_add_box(passage, Vector3( pw, 1.75, 0), Vector3(WALL_THICK, 3.5, p_length), wall_mat)
 
 	
-func _build_shooting_range() -> void:
-	var quad := "nw"
-	var floor_mat: StandardMaterial3D = mats[quad][0]
-	var wall_mat: StandardMaterial3D = mats[quad][1]
-
-	var range_length := ROOM_SIZE * 2.0
-	var range_width := ROOM_SIZE
-	var center := Vector3(-ROOM_SIZE / 2.0 - range_length / 2.0, 0.0, 0.0)
-
-	var range_room := Node3D.new()
-	range_room.name = "ShootingRange"
-	range_room.position = center
-	add_child(range_room)
-
-	# Floor and ceiling
-	_add_box(range_room, Vector3(0, -0.5, 0), Vector3(range_length, 1, range_width), floor_mat)
-	_add_box(range_room, Vector3(0, 5.25, 0), Vector3(range_length, 0.5, range_width), mat_ceiling)
-
-	# North wall
-	var half_w := range_width / 2.0
-	_add_box(range_room, Vector3(0, 2.5, -half_w), Vector3(range_length, 5, WALL_THICK), wall_mat)
-	# South wall
-	_add_box(range_room, Vector3(0, 2.5, half_w), Vector3(range_length, 5, WALL_THICK), wall_mat)
-	# West wall (far end with targets)
-	var half_l := range_length / 2.0
-	_add_box(range_room, Vector3(-half_l, 2.5, 0), Vector3(WALL_THICK, 5, range_width), wall_mat)
-	# East wall (opening toward spawn room) - doorway
-	var side_len := (range_width - PASSAGE_WIDTH) / 2.0
-	_add_box(range_room, Vector3(half_l, 2.5, -(half_w - side_len / 2.0)), Vector3(WALL_THICK, 5, side_len), wall_mat)
-	_add_box(range_room, Vector3(half_l, 2.5,  (half_w - side_len / 2.0)), Vector3(WALL_THICK, 5, side_len), wall_mat)
-	_add_box(range_room, Vector3(half_l, 4.25, 0), Vector3(WALL_THICK, 1.5, PASSAGE_WIDTH), wall_mat)
-
-	# Targets on west wall - all at same height (lower on wall = 1.5)
-	var target_x := -half_l + 0.3
-	_add_target(range_room, Vector3(target_x, 1.5, -3.0), 1.2)
-	_add_target(range_room, Vector3(target_x, 1.5, 0.0), 0.8)
-	_add_target(range_room, Vector3(target_x, 1.5, 3.0), 0.5)
-
-	# Purple torches - 4 on each long wall
-	var torch_color := Color(0.6, 0.1, 0.9)
-	var wall_offset := half_w - 0.25
-	var torch_positions: Array[Array] = [
-		[Vector3(-9.0, 2.5, -wall_offset), 0.0],
-		[Vector3(-3.0, 2.5, -wall_offset), 0.0],
-		[Vector3(3.0, 2.5, -wall_offset), 0.0],
-		[Vector3(9.0, 2.5, -wall_offset), 0.0],
-		[Vector3(-9.0, 2.5, wall_offset), PI],
-		[Vector3(-3.0, 2.5, wall_offset), PI],
-		[Vector3(3.0, 2.5, wall_offset), PI],
-		[Vector3(9.0, 2.5, wall_offset), PI],
-	]
-	for spot in torch_positions:
-		var t := torch_scene.instantiate()
-		t.position = spot[0]
-		t.rotation.y = spot[1]
-		range_room.add_child(t)
-		# Override light color to purple after adding to tree
-		var light: OmniLight3D = t.get_node("OmniLight3D")
-		light.light_color = torch_color
-		var flame: MeshInstance3D = t.get_node("Flame")
-		var purple_mat := StandardMaterial3D.new()
-		purple_mat.albedo_color = Color(0.7, 0.2, 1.0)
-		purple_mat.emission_enabled = true
-		purple_mat.emission = Color(0.6, 0.1, 0.9)
-		purple_mat.emission_energy_multiplier = 3.0
-		flame.material_override = purple_mat
-
-func _add_target(parent: Node3D, pos: Vector3, size: float) -> void:
-	# Outer ring - red
-	var outer_mat := StandardMaterial3D.new()
-	outer_mat.albedo_color = Color(0.8, 0.1, 0.1)
-	var outer := CSGCylinder3D.new()
-	outer.radius = size / 2.0
-	outer.height = 0.05
-	outer.sides = 32
-	outer.rotation.z = deg_to_rad(90)
-	outer.position = pos
-	outer.use_collision = true
-	outer.material = outer_mat
-	parent.add_child(outer)
-
-	# Middle ring - white
-	var mid_mat := StandardMaterial3D.new()
-	mid_mat.albedo_color = Color(0.9, 0.9, 0.9)
-	var mid := CSGCylinder3D.new()
-	mid.radius = size / 3.0
-	mid.height = 0.06
-	mid.sides = 32
-	mid.rotation.z = deg_to_rad(90)
-	mid.position = pos + Vector3(0.02, 0, 0)
-	mid.material = mid_mat
-	parent.add_child(mid)
-
-	# Bullseye - red
-	var bull_mat := StandardMaterial3D.new()
-	bull_mat.albedo_color = Color(0.9, 0.05, 0.05)
-	var bull := CSGCylinder3D.new()
-	bull.radius = size / 6.0
-	bull.height = 0.07
-	bull.sides = 32
-	bull.rotation.z = deg_to_rad(90)
-	bull.position = pos + Vector3(0.04, 0, 0)
-	bull.material = bull_mat
-	parent.add_child(bull)
-
 func get_room_exits(pos: Vector3) -> Array[Vector3]:
 	var best_row := 0
 	var best_col := 0
@@ -430,15 +337,93 @@ func _spawn_cube_at(room_pos: Vector3) -> void:
 
 func _spawn_pickup() -> void:
 	var pickup := pickup_scene.instantiate()
-	var range_entrance_x := -ROOM_SIZE / 2.0
-	pickup.position = Vector3(range_entrance_x - 1.5, 0.5, 1.5)
+	var room_center := _room_center(0, 1)
+	var wall_x := room_center.x + ROOM_SIZE / 2.0 - 0.5
+	pickup.position = Vector3(wall_x, 1.5, room_center.z + 1.5)
+	pickup.rotation.y = deg_to_rad(-90)
+	pickup.rotation.x = deg_to_rad(-270)
 	add_child(pickup)
 
 func _spawn_spear_pickup() -> void:
 	var spear := spear_scene.instantiate()
-	var range_entrance_x := -ROOM_SIZE / 2.0
-	spear.position = Vector3(range_entrance_x - 1.5, 0.8, -1.5)
+	var room_center := _room_center(0, 1)
+	var wall_x := room_center.x + ROOM_SIZE / 2.0 - 0.5
+	spear.position = Vector3(wall_x, 1.5, room_center.z - 1.5)
 	add_child(spear)
+
+func _spawn_light_spheres() -> void:
+	var room_center := _room_center(0, 1)
+	# 3 spheres on a shelf on the north wall
+	var wall_z := room_center.z - ROOM_SIZE / 2.0 + 0.5
+	for i in 3:
+		var sphere_pickup := Area3D.new()
+		sphere_pickup.name = "SpherePickup_%d" % i
+		sphere_pickup.collision_layer = 0
+		sphere_pickup.collision_mask = 2
+		sphere_pickup.position = Vector3(room_center.x - 0.5 + i * 0.5, 1.2, wall_z)
+		sphere_pickup.add_to_group("sphere_pickup")
+		sphere_pickup.add_to_group("light_sphere")
+
+		var col := CollisionShape3D.new()
+		var shape := SphereShape3D.new()
+		shape.radius = 0.8
+		col.shape = shape
+		sphere_pickup.add_child(col)
+
+		var mesh_inst := MeshInstance3D.new()
+		var sphere_mesh := SphereMesh.new()
+		sphere_mesh.radius = 0.15
+		sphere_mesh.height = 0.3
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(1.0, 0.95, 0.7)
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.85, 0.4)
+		mat.emission_energy_multiplier = 2.0
+		sphere_mesh.material = mat
+		mesh_inst.mesh = sphere_mesh
+		sphere_pickup.add_child(mesh_inst)
+
+		var light := OmniLight3D.new()
+		light.light_color = Color(1.0, 0.85, 0.5)
+		light.light_energy = 1.5
+		light.omni_range = 4.0
+		sphere_pickup.add_child(light)
+
+		sphere_pickup.body_entered.connect(func(body: Node3D):
+			if body.name == "Player":
+				sphere_pickup.set_meta("player_nearby", true)
+		)
+		sphere_pickup.body_exited.connect(func(body: Node3D):
+			if body.name == "Player":
+				sphere_pickup.set_meta("player_nearby", false)
+		)
+
+		add_child(sphere_pickup)
+
+func _build_armory_sign() -> void:
+	var sign_pos := Vector3(ROOM_SIZE / 2.0 - 0.27, 4.25, 0.0)
+
+	# Wooden plank behind the text
+	var plank := CSGBox3D.new()
+	plank.size = Vector3(0.1, 0.6, 2.8)
+	plank.position = sign_pos
+	plank.use_collision = false
+	var wood_mat := StandardMaterial3D.new()
+	wood_mat.albedo_color = Color(0.3, 0.18, 0.08)
+	plank.material = wood_mat
+	add_child(plank)
+
+	# Text on the plank
+	var label := Label3D.new()
+	label.text = "A R M O R Y"
+	label.font_size = 96
+	label.pixel_size = 0.005
+	label.position = sign_pos + Vector3(-0.06, 0.0, 0.0)
+	label.rotation.y = deg_to_rad(-90)
+	label.modulate = Color(0.05, 0.05, 0.05)
+	label.no_depth_test = false
+	label.double_sided = false
+	add_child(label)
 
 func respawn_enemy(old_pos: Vector3) -> void:
 	var rooms: Array[Vector3] = []

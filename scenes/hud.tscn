@@ -65,3 +65,21 @@ theme_override_font_sizes/font_size = 22
 text = "Press E to pick up spear"
 horizontal_alignment = 1
 visible = false
+
+[node name="SpherePrompt" type="Label" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150
+offset_top = -80
+offset_right = 150
+offset_bottom = -50
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(1, 1, 1, 0.9)
+theme_override_font_sizes/font_size = 22
+text = "Press E to pick up light spheres"
+horizontal_alignment = 1
+visible = false
