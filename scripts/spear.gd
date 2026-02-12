@@ -1,19 +1,21 @@
 extends RigidBody3D
 
-const THROW_FORCE := 25.0
+const THROW_SPEED := 35.0
+const THROW_GRAVITY := 3.0
 const DAMAGE := 2
 
 var is_held := false
 var is_thrown := false
 var _player_nearby := false
+var vel := Vector3.ZERO
 
 func _ready() -> void:
 	add_to_group("spear")
 	freeze = true
 	gravity_scale = 0.0
+	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 1
-	body_entered.connect(_on_body_entered)
 	$PickupArea.body_entered.connect(_on_pickup_enter)
 	$PickupArea.body_exited.connect(_on_pickup_exit)
 	visible = true
@@ -34,32 +36,40 @@ func _on_pickup_exit(body: Node3D) -> void:
 		if p:
 			p.visible = false
 
-func _physics_process(_delta: float) -> void:
-	if is_thrown and not freeze and linear_velocity.length() > 0.5:
-		look_at(global_position + linear_velocity, Vector3.UP)
-		rotate_object_local(Vector3.RIGHT, deg_to_rad(140))
-
-func _on_body_entered(body: Node) -> void:
+func _physics_process(delta: float) -> void:
 	if not is_thrown:
 		return
-	# Save the flight direction before freezing
-	var flight_dir := linear_velocity.normalized()
-	is_thrown = false
-	freeze = true
-	linear_velocity = Vector3.ZERO
-	angular_velocity = Vector3.ZERO
-	# Re-orient so tip points in flight direction
-	if flight_dir.length() > 0.1:
-		look_at(global_position + flight_dir, Vector3.UP)
+
+	vel.y -= THROW_GRAVITY * delta
+	var from := global_position
+	var to := from + vel * delta
+
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(from, to, 5)
+	var result := space.intersect_ray(query)
+
+	if result:
+		is_thrown = false
+		freeze = true
+		linear_velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
+		look_at(global_position + vel, Vector3.UP)
 		rotate_object_local(Vector3.RIGHT, deg_to_rad(140))
-	if body.is_in_group("enemy") and body.has_method("take_damage"):
-		body.take_damage(DAMAGE, global_position)
-		var pos := global_position
-		var rot := global_rotation
-		get_parent().remove_child(self)
-		body.add_child(self)
-		global_position = pos
-		global_rotation = rot
+		# Position so tip is at hit point, pull back along flight direction
+		global_position = result.position - vel.normalized() * 0.5
+		var body: Node = result.collider
+		if body.is_in_group("enemy") and body.has_method("take_damage"):
+			body.take_damage(DAMAGE, result.position)
+			var pos := global_position
+			var rot := global_rotation
+			get_parent().remove_child(self)
+			body.add_child(self)
+			global_position = pos
+			global_rotation = rot
+	else:
+		global_position = to
+		look_at(global_position + vel, Vector3.UP)
+		rotate_object_local(Vector3.RIGHT, deg_to_rad(140))
 
 func can_pickup() -> bool:
 	return _player_nearby and not is_held and not is_thrown
@@ -103,11 +113,10 @@ func throw_spear(origin: Vector3, direction: Vector3) -> void:
 		get_parent().remove_child(self)
 	root.add_child(self)
 	global_position = origin
+	vel = direction.normalized() * THROW_SPEED
 	look_at(origin + direction, Vector3.UP)
 	rotate_object_local(Vector3.RIGHT, deg_to_rad(140))
-	freeze = false
-	gravity_scale = 0.3
+	freeze = true
 	collision_layer = 0
-	collision_mask = 5
-	linear_velocity = direction.normalized() * THROW_FORCE
+	collision_mask = 0
 	visible = true
